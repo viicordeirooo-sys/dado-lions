@@ -402,7 +402,6 @@
   let dx=restX, dy=restY;
   let prevX=null, prevY=null, prevT=null;
   let vy=0, vx=0;
-  let lastGoodVy=0, lastGoodVyT=0;
 
   function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
   function fistScore(lm){
@@ -424,27 +423,26 @@
 
   // detecção simplificada: não depende mais de ler punho fechado —
   // exige as DUAS mãos (cada uma) perto do dado, paradas, por um tempo sustentado
-  const THROW_VY = 340;              // px/s pra cima — gatilho do arremesso
   const GRAB_RADIUS_FACTOR = 0.15;   // raio por mão pra CONSIDERAR que pegou (mais apertado)
   const HANDS_TOGETHER_FACTOR = 0.22;// as duas mãos precisam estar próximas uma da outra
   const HOLD_RADIUS_FACTOR = 0.32;   // raio pra CONTINUAR segurando (mais folgado)
   const GRAB_SUSTAIN_MS = 380;       // as duas mãos precisam ficar paradas e perto por esse tempo
   const GRAB_STILL_VY = 220;         // velocidade máxima permitida durante a "pegada" (senão é só passagem)
   const MIN_HOLD_MS = 420;           // tempo mínimo segurando antes de aceitar o arremesso
+  const CAMERA_WARMUP_MS = 1300;     // ignora leituras logo após ligar a câmera (foco/exposição instáveis)
+  const LIFT_FACTOR = 0.35;          // arremesso independe de força: precisa subir ~altura do peito (estimativa, sem rastrear corpo/ombros — ajustar conforme o enquadramento real da câmera)
 
   let nearSince = null;
   let heldSince = null;
+  let cameraStartTime = 0;
 
   function onResults(results){
+    if((performance.now()-cameraStartTime) < CAMERA_WARMUP_MS) return; // câmera ainda estabilizando
+
     const hasTwo = results.multiHandLandmarks && results.multiHandLandmarks.length >= 2;
 
     if(!results.multiHandLandmarks || results.multiHandLandmarks.length === 0){
       nearSince = null;
-      // mãos sumiram: só conta como arremesso se já estava segurando por tempo suficiente
-      if(mode==='held' && heldSince && (performance.now()-heldSince)>MIN_HOLD_MS &&
-         (performance.now()-lastGoodVyT) < 220 && lastGoodVy < -THROW_VY){
-        throwDice(Math.min(2.2, Math.max(0.9, Math.abs(lastGoodVy)/700)), vx);
-      }
       return;
     }
 
@@ -465,7 +463,6 @@
       const dt = Math.max((now-prevT)/1000, 0.001);
       vx = (p.x-prevX)/dt;
       vy = (p.y-prevY)/dt;
-      if(vy < -THROW_VY){ lastGoodVy = vy; lastGoodVyT = now; }
     }
     prevX=p.x; prevY=p.y; prevT=now;
 
@@ -482,7 +479,7 @@
           if(now - nearSince >= GRAB_SUSTAIN_MS){
             mode = 'held';
             heldSince = now;
-            statusEl.textContent = 'Segurou! Agora levanta e joga pra cima';
+            statusEl.textContent = 'Segurou! Agora levanta o braço';
             nearSince = null;
           }
         } else {
@@ -496,19 +493,19 @@
       setDicePos(dx,dy);
       contactShadow.style.opacity = Math.max(0.15, 1 - Math.abs(dy-restY)/(camWrap.clientHeight*0.5));
 
-      // gatilho principal: velocidade pra cima — só vale depois de já ter segurado um tempo mínimo
+      // gatilho independente de força: basta o braço ter subido o suficiente, não importa a velocidade
       const heldLongEnough = heldSince && (now - heldSince) > MIN_HOLD_MS;
-      if(heldLongEnough && vy < -THROW_VY){
-        const power = Math.min(2.2, Math.max(0.9, Math.abs(vy)/700));
-        throwDice(power, vx);
+      const liftedEnough = (restY - dy) > camWrap.clientHeight*LIFT_FACTOR;
+      if(heldLongEnough && liftedEnough){
+        throwDice(1.3, vx);
         return;
       }
-      // se as mãos se afastam do dado sem ser um arremesso, solta suave de volta
+      // se as mãos se afastam do dado sem ter levantado o suficiente, solta suave de volta
       const farFromDice = !hasTwo || dist(p, {x:dx,y:dy}) > camWrap.clientHeight*HOLD_RADIUS_FACTOR;
-      if(farFromDice && Math.abs(vy) < THROW_VY*0.5){
+      if(farFromDice && !liftedEnough){
         mode = 'idle';
         heldSince = null;
-        statusEl.textContent = 'Pega o dado com as duas mãos e joga com força pra cima';
+        statusEl.textContent = 'Pega o dado com as duas mãos e levanta o braço';
         animateDrop();
       }
     }
@@ -605,6 +602,7 @@
   // ---- inicialização da câmera / mediapipe ----
   function startTracking(){
     computeRest();
+    cameraStartTime = performance.now();
     const hands = new Hands({ locateFile: (f)=> `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
     hands.setOptions({ maxNumHands:2, modelComplexity:1, minDetectionConfidence:0.6, minTrackingConfidence:0.6 });
     hands.onResults(onResults);
