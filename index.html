@@ -431,10 +431,14 @@
   const MIN_HOLD_MS = 300;           // tempo mínimo segurando antes de aceitar o arremesso (só pra não jogar no mesmo instante que pega)
 
   const CAMERA_WARMUP_MS = 1300;     // ignora leituras logo após ligar a câmera (foco/exposição instáveis)
+  const UP_SUSTAIN_MS = 150;         // a mão precisa estar subindo continuamente por esse tempo
+  const UP_LIFT_FACTOR = 0.055;      // e ter percorrido pelo menos esse tanto da tela nesse intervalo (filtra tremedeira/ruído)
 
   let nearSince = null;
   let heldSince = null;
   let cameraStartTime = 0;
+  let upStreakStart = null;   // quando a subida contínua começou
+  let upStreakStartDy = null; // posição y no início da subida contínua
 
   function onResults(results){
     if((performance.now()-cameraStartTime) < CAMERA_WARMUP_MS) return; // câmera ainda estabilizando
@@ -485,6 +489,7 @@
             cube.style.transform = `rotateX(${cubeRotX}deg) rotateY(${cubeRotY}deg)`;
             statusEl.textContent = 'Segurou! Mexe a mão pra girar, levanta pra jogar';
             nearSince = null;
+            upStreakStart = null; upStreakStartDy = null;
           }
         } else {
           nearSince = null;
@@ -503,10 +508,19 @@
       cubeRotX = Math.max(-70, Math.min(20, cubeRotX - dyDelta*0.25));
       cube.style.transform = `rotateX(${cubeRotX}deg) rotateY(${cubeRotY}deg)`;
 
-      // sem margem mínima: qualquer movimento dos braços pra cima já libera o arremesso
+      // gatilho com sentido: precisa de movimento CONTÍNUO pra cima (não troca de direção)
+      // por um tempinho, cobrindo uma distância mínima real — filtra tremedeira/ruído
       const heldLongEnough = heldSince && (now - heldSince) > MIN_HOLD_MS;
-      const movingUp = dyDelta < 0;
-      if(heldLongEnough && movingUp){
+
+      if(vy < -30){ // subindo (limiar bem baixo, só ignora ruído puro)
+        if(upStreakStart===null){ upStreakStart = now; upStreakStartDy = p.y; }
+      } else {
+        upStreakStart = null; upStreakStartDy = null;
+      }
+      const streakSustained = upStreakStart!==null && (now-upStreakStart) >= UP_SUSTAIN_MS;
+      const streakLifted = upStreakStart!==null && (upStreakStartDy - p.y) > camWrap.clientHeight*UP_LIFT_FACTOR;
+
+      if(heldLongEnough && streakSustained && streakLifted){
         throwDice(1.3, vx);
         return;
       }
@@ -515,6 +529,7 @@
       if(farFromDice){
         mode = 'idle';
         heldSince = null;
+        upStreakStart = null; upStreakStartDy = null;
         cube.style.animation = 'idleBob 2.8s ease-in-out infinite';
         cube.style.transform = '';
         statusEl.textContent = 'Pega o dado com as duas mãos e levanta o braço';
@@ -542,6 +557,7 @@
   function throwDice(power, vxAtRelease){
     mode = 'thrown';
     heldSince = null;
+    upStreakStart = null; upStreakStartDy = null;
     statusEl.textContent = 'Lançando...';
     prizeBanner.classList.remove('show');
     cube.style.animation = 'none';
