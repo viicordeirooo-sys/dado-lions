@@ -431,9 +431,11 @@
   const MIN_HOLD_MS = 300;           // tempo mínimo segurando antes de aceitar o arremesso (só pra não jogar no mesmo instante que pega)
 
   const CAMERA_WARMUP_MS = 1300;     // ignora leituras logo após ligar a câmera (foco/exposição instáveis)
-  const UP_SUSTAIN_MS = 130;         // as DUAS mãos precisam estar subindo juntas por esse tempo
-  const UP_LIFT_FACTOR = 0.045;      // e ter percorrido pelo menos esse tanto da tela nesse intervalo
-  const SMOOTH_VY_FACTOR = 0.11;     // fração da altura da tela por segundo (relativo, não pixels fixos — consistente em qualquer tela/dispositivo)
+  const UP_SUSTAIN_MS = 100;         // as DUAS mãos precisam estar subindo juntas por esse tempo
+  const UP_LIFT_FACTOR = 0.04;       // e ter percorrido pelo menos esse tanto da tela nesse intervalo
+  const SMOOTH_VY_FACTOR = 0.08;     // fração da altura da tela por segundo (relativo, não pixels fixos — consistente em qualquer tela/dispositivo)
+  const DOWN_DROP_MS = 350;          // descendo de forma sustentada por esse tempo = devolve o dado ao chão
+  const HELD_TIMEOUT_MS = 8000;      // segurando sem jogar por esse tempo = devolve sozinho
 
   let nearSince = null;
   let heldSince = null;
@@ -442,6 +444,7 @@
   let upStreakStartDy = null; // posição y média no início da subida contínua
   let lastUpMotionT = 0;      // último instante em que as duas mãos subiam juntas
   let releasePendingSince = null; // debounce da soltura suave
+  let downSince = null;           // início da descida sustentada
 
   // rastreio por mão (não pela posição combinada) — cada mão mantém sua própria
   // velocidade vertical suavizada, casada frame a frame por proximidade (evita
@@ -482,6 +485,7 @@
     // casa cada mão detectada com a mesma "mão" do frame anterior (por proximidade),
     // pra medir a velocidade real de CADA mão em vez de uma média que mascara ruído
     let bothMovingUp = false;
+    let bothMovingDown = false;
     if(palms.length===2){
       let ordered = palms;
       if(prevPalmsTracked && prevPalmsTracked.length===2){
@@ -495,6 +499,7 @@
           smoothVy[i] = smoothVy[i]*0.55 + vyRaw*0.45; // suaviza — filtra tremedeira de 1 frame
         }
         bothMovingUp = smoothVy[0] < -camWrap.clientHeight*SMOOTH_VY_FACTOR && smoothVy[1] < -camWrap.clientHeight*SMOOTH_VY_FACTOR;
+        bothMovingDown = smoothVy[0] > camWrap.clientHeight*SMOOTH_VY_FACTOR && smoothVy[1] > camWrap.clientHeight*SMOOTH_VY_FACTOR;
       }
       prevPalmsTracked = ordered;
     } else {
@@ -565,6 +570,30 @@
         return;
       }
 
+      // função de soltar reutilizável
+      const softDrop = ()=>{
+        mode = 'idle';
+        heldSince = null;
+        upStreakStart = null; upStreakStartDy = null;
+        releasePendingSince = null;
+        downSince = null;
+        cube.style.animation = 'idleBob 2.8s ease-in-out infinite';
+        cube.style.transform = '';
+        statusEl.textContent = 'Pega o dado com as duas mãos e levanta o braço';
+        animateDrop();
+      };
+
+      // abaixar as mãos de forma sustentada = devolver o dado ao chão
+      if(bothMovingDown){
+        if(downSince===null) downSince = now;
+        if(now - downSince >= DOWN_DROP_MS){ softDrop(); return; }
+      } else {
+        downSince = null;
+      }
+
+      // segurando tempo demais sem jogar = devolve sozinho (evita ficar "grudado" pra sempre)
+      if(heldSince && (now - heldSince) > HELD_TIMEOUT_MS){ softDrop(); return; }
+
       const farFromDice = !hasTwo || dist(p, {x:dx,y:dy}) > camWrap.clientHeight*HOLD_RADIUS_FACTOR;
       if(farFromDice){
         // se as mãos "escaparam"/sumiram DURANTE um movimento de subida, isso É o arremesso
@@ -576,14 +605,7 @@
         // soltura suave só depois de um tempo sustentado longe (debounce — sem drop instantâneo)
         if(releasePendingSince===null) releasePendingSince = now;
         if(now - releasePendingSince >= 300){
-          mode = 'idle';
-          heldSince = null;
-          upStreakStart = null; upStreakStartDy = null;
-          releasePendingSince = null;
-          cube.style.animation = 'idleBob 2.8s ease-in-out infinite';
-          cube.style.transform = '';
-          statusEl.textContent = 'Pega o dado com as duas mãos e levanta o braço';
-          animateDrop();
+          softDrop();
         }
       } else {
         releasePendingSince = null;
