@@ -445,6 +445,9 @@
   let lastUpMotionT = 0;      // último instante em que as duas mãos subiam juntas
   let releasePendingSince = null; // debounce da soltura suave
   let downSince = null;           // início da descida sustentada
+  let pendingThrow = false;       // subida válida aconteceu antes do tempo mínimo — dispara assim que vencer
+  // alvos pra renderização suave (60fps via rAF, interpolando entre leituras da câmera)
+  let targetX = 0, targetY = 0, targetRotX = -15, targetRotY = 20;
 
   // rastreio por mão (não pela posição combinada) — cada mão mantém sua própria
   // velocidade vertical suavizada, casada frame a frame por proximidade (evita
@@ -527,13 +530,16 @@
             heldSince = now;
             // nasce já na posição real da mão — sem "esticar" suavemente até lá (evita o pulo)
             dx = p.x; dy = p.y;
-            cube.style.animation = 'none';
+            targetX = p.x; targetY = p.y;
             cubeRotX = -15; cubeRotY = 20;
+            targetRotX = -15; targetRotY = 20;
+            cube.style.animation = 'none';
             cube.style.transform = `rotateX(${cubeRotX}deg) rotateY(${cubeRotY}deg)`;
             statusEl.textContent = 'Segurou! Mexe a mão pra girar, levanta pra jogar';
             nearSince = null;
             upStreakStart = null; upStreakStartDy = null;
             smoothVy = [0,0];
+            pendingThrow = false;
           }
         } else {
           nearSince = null;
@@ -542,15 +548,12 @@
         nearSince = null;
       }
     } else if(mode==='held'){
-      const dxDelta = p.x - dx, dyDelta = p.y - dy;
-      dx += dxDelta*0.85; dy += dyDelta*0.85; // segue colado na mão (menos atraso = não "escapa" no movimento rápido)
-      setDicePos(dx,dy);
-      contactShadow.style.opacity = Math.max(0.15, 1 - Math.abs(dy-restY)/(camWrap.clientHeight*0.5));
-
-      // girar o dado conforme a mão se move ao redor dele — sensação de segurar um objeto real
-      cubeRotY += dxDelta*0.35;
-      cubeRotX = Math.max(-70, Math.min(20, cubeRotX - dyDelta*0.25));
-      cube.style.transform = `rotateX(${cubeRotX}deg) rotateY(${cubeRotY}deg)`;
+      // só atualiza os ALVOS aqui — quem renderiza (60fps, interpolado) é o loop rAF
+      const dxDelta = p.x - targetX, dyDelta = p.y - targetY;
+      targetX = p.x; targetY = p.y;
+      targetRotY += dxDelta*0.35;
+      targetRotX = Math.max(-70, Math.min(20, targetRotX - dyDelta*0.25));
+      contactShadow.style.opacity = Math.max(0.15, 1 - Math.abs(targetY-restY)/(camWrap.clientHeight*0.5));
 
       // gatilho com sentido: as DUAS mãos precisam estar subindo JUNTAS (movimento real,
       // suavizado por mão) de forma contínua por um tempinho, cobrindo distância mínima real
@@ -565,7 +568,11 @@
       const streakSustained = upStreakStart!==null && (now-upStreakStart) >= UP_SUSTAIN_MS;
       const streakLifted = upStreakStart!==null && (upStreakStartDy - p.y) > camWrap.clientHeight*UP_LIFT_FACTOR;
 
-      if(heldLongEnough && streakSustained && streakLifted){
+      // subida válida = intenção de jogar; se veio antes do tempo mínimo, fica LATCHED
+      // e dispara assim que o tempo vencer (nunca descarta o primeiro arremesso)
+      if(streakSustained && streakLifted) pendingThrow = true;
+
+      if(pendingThrow && heldLongEnough){
         throwDice(1.3, vx);
         return;
       }
@@ -577,6 +584,7 @@
         upStreakStart = null; upStreakStartDy = null;
         releasePendingSince = null;
         downSince = null;
+        pendingThrow = false;
         cube.style.animation = 'idleBob 2.8s ease-in-out infinite';
         cube.style.transform = '';
         statusEl.textContent = 'Pega o dado com as duas mãos e levanta o braço';
@@ -634,6 +642,7 @@
     heldSince = null;
     upStreakStart = null; upStreakStartDy = null;
     releasePendingSince = null;
+    pendingThrow = false;
     statusEl.textContent = 'Lançando...';
     prizeBanner.classList.remove('show');
     cube.style.animation = 'none';
@@ -710,6 +719,21 @@
   }
 
   // ---- inicialização da câmera / mediapipe ----
+  // loop de renderização a 60fps: interpola suavemente até os alvos que a câmera
+  // atualiza a ~15-25fps — elimina a "travadinha" da rotação/movimento
+  function renderLoop(){
+    if(mode==='held'){
+      dx += (targetX-dx)*0.35;
+      dy += (targetY-dy)*0.35;
+      cubeRotX += (targetRotX-cubeRotX)*0.35;
+      cubeRotY += (targetRotY-cubeRotY)*0.35;
+      setDicePos(dx,dy);
+      cube.style.transform = `rotateX(${cubeRotX}deg) rotateY(${cubeRotY}deg)`;
+    }
+    requestAnimationFrame(renderLoop);
+  }
+  requestAnimationFrame(renderLoop);
+
   function startTracking(){
     computeRest();
     cameraStartTime = performance.now();
