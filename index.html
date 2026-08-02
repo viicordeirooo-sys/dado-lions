@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Lançar o Dado — Gesto</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+  html, body {
+    height:100%; width:100%;
+    background:#050308;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow:hidden;
+    color:#fff;
+  }
+  .app { position:relative; height:100vh; height:100dvh; width:100vw; }
+
+  .cam-wrap {
+    position:absolute; inset:0;
+    overflow:hidden;
+    transform: scaleX(-1); /* espelha câmera + overlay juntos, feito espelho */
+  }
+  video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .dim { position:absolute; inset:0; background: radial-gradient(ellipse at 50% 40%, rgba(10,6,18,0.15) 0%, rgba(5,3,8,0.65) 100%); }
+
+  .overlay { position:absolute; inset:0; pointer-events:none; }
+
+  .grab-zone {
+    position:absolute; width:26vh; height:26vh;
+    border-radius:50%;
+    border: 0.3vh dashed rgba(255,215,106,0.4);
+    transform: translate(-50%,-50%);
+    animation: gzPulse 2.4s ease-in-out infinite;
+  }
+  @keyframes gzPulse { 0%,100%{ opacity:0.35; } 50%{ opacity:0.75; } }
+
+  .palm-dot {
+    position:absolute; width:2.2vh; height:2.2vh; border-radius:50%;
+    background: radial-gradient(circle, #fff4cf, #ffd76a 60%, transparent);
+    box-shadow: 0 0 2vh rgba(255,215,106,0.8);
+    transform: translate(-50%,-50%);
+    opacity:0;
+    transition: opacity 0.15s ease;
+  }
+
+  .dice-scene { position:absolute; width:17vh; height:17vh; perspective:130vh; transform: translate(-50%,-50%); }
+  .cube {
+    width:17vh; height:17vh; position:relative;
+    transform-style: preserve-3d;
+    transform: rotateX(-15deg) rotateY(20deg);
+    animation: idleBob 2.6s ease-in-out infinite;
+  }
+  @keyframes idleBob {
+    0%,100% { transform: rotateX(-15deg) rotateY(20deg) translateY(0); }
+    50% { transform: rotateX(-19deg) rotateY(27deg) translateY(-1.2vh); }
+  }
+  .face {
+    position:absolute; width:17vh; height:17vh;
+    background: linear-gradient(155deg, #2a1f10 0%, #120c05 55%, #060402 100%);
+    border: 0.15vh solid rgba(255,215,106,0.4);
+    border-radius:2.4vh;
+    box-shadow: inset 0 0 2.6vh rgba(0,0,0,0.6), inset 0 0.2vh 0.6vh rgba(255,233,168,0.18);
+    display:grid; grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(3,1fr);
+    padding: 2.4vh;
+  }
+  .dot {
+    width:2.4vh; height:2.4vh; border-radius:50%;
+    background: radial-gradient(circle at 35% 30%, #fff4cf, #d4af37 60%, #8a6a1a);
+    box-shadow: 0 0 1.1vh rgba(255,215,106,0.6);
+    align-self:center; justify-self:center;
+  }
+  .f-front  { transform: translateZ(8.5vh); }
+  .f-back   { transform: rotateY(180deg) translateZ(8.5vh); }
+  .f-right  { transform: rotateY(90deg) translateZ(8.5vh); }
+  .f-left   { transform: rotateY(-90deg) translateZ(8.5vh); }
+  .f-top    { transform: rotateX(90deg) translateZ(8.5vh); }
+  .f-bottom { transform: rotateX(-90deg) translateZ(8.5vh); }
+  .ghost { position:absolute; inset:0; opacity:0.16; filter: blur(0.5vh); pointer-events:none; }
+
+  .hud {
+    position:absolute; left:0; right:0; top:0;
+    display:flex; flex-direction:column; align-items:center;
+    padding: 4vh 4vw 0;
+    pointer-events:none;
+  }
+  .title .kicker { color:#c9a6ff; font-size:1.6vh; letter-spacing:0.6vh; font-weight:600; text-transform:uppercase; opacity:0.85; text-align:center; }
+  .title h1 {
+    font-size:4.4vh; font-weight:800; letter-spacing:0.2vh; margin-top:0.4vh; text-align:center;
+    background: linear-gradient(135deg, #fff4cf 0%, #ffd76a 35%, #d4af37 60%, #ffe9a8 100%);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    filter: drop-shadow(0 2px 16px rgba(212,175,55,0.45));
+  }
+  .status {
+    margin-top: 1.6vh;
+    font-size: 2vh; letter-spacing:0.3vh; font-weight:600;
+    color: rgba(255,233,168,0.85);
+    text-shadow: 0 0 1.4vh rgba(0,0,0,0.7);
+    text-align:center;
+    min-height:2.6vh;
+  }
+
+  .bottom-hud {
+    position:absolute; left:0; right:0; bottom:0;
+    display:flex; flex-direction:column; align-items:center;
+    padding: 0 4vw 4vh;
+    pointer-events:none;
+  }
+  .prize-banner {
+    width:88vw; max-width:640px;
+    padding: 2vh 2.4vh; border-radius: 2.2vh;
+    display:flex; align-items:center; gap:1.8vh;
+    background: linear-gradient(135deg, rgba(212,175,55,0.2), rgba(120,50,200,0.16));
+    border: 0.25vh solid rgba(212,175,55,0.5);
+    backdrop-filter: blur(6px);
+    opacity:0; transform: translateY(1.6vh) scale(0.96);
+    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(.2,1.4,.4,1);
+  }
+  .prize-banner.show { opacity:1; transform: translateY(0) scale(1); }
+  .prize-banner .icon { font-size:4.6vh; filter: drop-shadow(0 0 1.6vh currentColor); }
+  .prize-banner .txt .l1 { font-size:1.5vh; letter-spacing:0.4vh; color: rgba(255,255,255,0.6); text-transform:uppercase; }
+  .prize-banner .txt .l2 { font-size:2.6vh; font-weight:800; margin-top:0.3vh; }
+
+  .permission-screen {
+    position:absolute; inset:0; z-index:20;
+    background: radial-gradient(ellipse at center, #1a0f2e 0%, #050308 80%);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:2vh; padding: 6vw; text-align:center;
+  }
+  .permission-screen h2 {
+    font-size:2.6vh;
+    background: linear-gradient(135deg, #ffd76a, #d4af37);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  .permission-screen p { font-size:1.7vh; color: rgba(255,255,255,0.6); max-width:80vw; line-height:1.5; }
+  .permission-btn {
+    margin-top:1vh; padding: 1.6vh 4vh; border-radius:999px; border:none;
+    background: linear-gradient(135deg, #d4af37, #b8860b); color:#1a0f0a;
+    font-weight:700; font-size:1.8vh; letter-spacing:0.3vh; text-transform:uppercase;
+  }
+  .error-text { color:#f87171; font-size:1.6vh; margin-top:1vh; }
+
+  .confetti { position:fixed; inset:0; pointer-events:none; z-index:30; }
+  .confetti span { position:absolute; top:-10px; border-radius:2px; animation: fall linear forwards; }
+  @keyframes fall { to { transform: translateY(110vh) rotate(540deg); opacity:0.2; } }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="cam-wrap" id="camWrap">
+    <video id="video" playsinline muted></video>
+    <div class="dim"></div>
+    <div class="overlay" id="overlay">
+      <div class="grab-zone" id="grabZone"></div>
+      <div class="palm-dot" id="palmDot"></div>
+      <div class="dice-scene" id="diceScene">
+        <div class="cube" id="cube">
+          <div class="face f-front" data-v="1"></div>
+          <div class="face f-back" data-v="6"></div>
+          <div class="face f-right" data-v="2"></div>
+          <div class="face f-left" data-v="5"></div>
+          <div class="face f-top" data-v="3"></div>
+          <div class="face f-bottom" data-v="4"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div class="title">
+      <div class="kicker">Lions · Sorte Premiada</div>
+      <h1>PEGUE E LANCE O DADO</h1>
+    </div>
+    <div class="status" id="status">Aproxime a mão e feche o punho no dado</div>
+  </div>
+
+  <div class="bottom-hud">
+    <div class="prize-banner" id="prizeBanner">
+      <div class="icon" id="prizeIcon">🎰</div>
+      <div class="txt"><div class="l1">Você ganhou</div><div class="l2" id="prizeLabel">—</div></div>
+    </div>
+  </div>
+
+  <div class="permission-screen" id="permScreen">
+    <h2>Libere a câmera</h2>
+    <p>Esse jogo lê o movimento da sua mão pela webcam. Nada de vídeo é enviado — tudo roda no seu navegador.</p>
+    <button class="permission-btn" id="permBtn">Ativar câmera</button>
+    <div class="error-text" id="errText"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+(function(){
+  // ---- prêmios do Lions por face do dado (1 a 6) ----
+  const PRIZE_BY_FACE = {
+    1: { icon:'🪙', label:'FICHA R$100',      color:'#ffd76a' },
+    2: { icon:'🪙', label:'FICHA R$200',      color:'#ffcf4d' },
+    3: { icon:'🔄', label:'GIRE DE NOVO',     color:'#94a3b8' },
+    4: { icon:'🎫', label:'CUPOM CARRO 0KM',  color:'#4ade80' },
+    5: { icon:'📲', label:'IPAD',             color:'#60a5fa' },
+    6: { icon:'🪙', label:'FICHA R$5000',     color:'#ffd700' },
+  };
+  const ROT = { 1:{x:0,y:0}, 2:{x:0,y:-90}, 3:{x:-90,y:0}, 4:{x:90,y:0}, 5:{x:0,y:90}, 6:{x:0,y:180} };
+
+  function buildDots(){
+    document.querySelectorAll('.face').forEach(face=>{
+      const v = parseInt(face.dataset.v);
+      const layout = { 1:[5], 2:[1,9], 3:[1,5,9], 4:[1,3,7,9], 5:[1,3,5,7,9], 6:[1,3,4,6,7,9] }[v];
+      face.innerHTML = '';
+      for(let i=1;i<=9;i++){
+        const cell = document.createElement('div');
+        if(layout.includes(i)) cell.className='dot';
+        face.appendChild(cell);
+      }
+    });
+  }
+  buildDots();
+
+  const video = document.getElementById('video');
+  const camWrap = document.getElementById('camWrap');
+  const grabZone = document.getElementById('grabZone');
+  const palmDot = document.getElementById('palmDot');
+  const diceScene = document.getElementById('diceScene');
+  const cube = document.getElementById('cube');
+  const statusEl = document.getElementById('status');
+  const prizeBanner = document.getElementById('prizeBanner');
+  const prizeIcon = document.getElementById('prizeIcon');
+  const prizeLabel = document.getElementById('prizeLabel');
+  const permScreen = document.getElementById('permScreen');
+  const permBtn = document.getElementById('permBtn');
+  const errText = document.getElementById('errText');
+
+  // ---- som sintetizado ----
+  let actx=null;
+  function ac(){ if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)(); return actx; }
+  function clack(vol){
+    try{ const c=ac(); const o=c.createOscillator(); const g=c.createGain();
+      o.type='triangle'; o.frequency.value=180+Math.random()*90; g.gain.value=vol;
+      o.connect(g); g.connect(c.destination); o.start();
+      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime+0.09); o.stop(c.currentTime+0.1);
+    }catch(e){}
+  }
+  function winChime(){
+    try{ const c=ac();
+      [523.25,659.25,783.99,1046.5].forEach((f,i)=>{
+        const o=c.createOscillator(); const g=c.createGain();
+        o.type='sine'; o.frequency.value=f; g.gain.value=0.0001;
+        o.connect(g); g.connect(c.destination);
+        const t0=c.currentTime+i*0.09; o.start(t0);
+        g.gain.exponentialRampToValueAtTime(0.09,t0+0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001,t0+0.35); o.stop(t0+0.4);
+      });
+    }catch(e){}
+  }
+  function confetti(){
+    const wrap=document.createElement('div'); wrap.className='confetti'; document.body.appendChild(wrap);
+    const colors=['#ffd76a','#d4af37','#c084fc','#60a5fa','#f472b6','#4ade80'];
+    for(let i=0;i<55;i++){
+      const s=document.createElement('span'); const size=6+Math.random()*6;
+      s.style.left=Math.random()*100+'vw'; s.style.width=size+'px'; s.style.height=(size*0.4)+'px';
+      s.style.background=colors[Math.floor(Math.random()*colors.length)];
+      s.style.animationDuration=(2+Math.random()*1.8)+'s'; s.style.animationDelay=(Math.random()*0.3)+'s';
+      wrap.appendChild(s);
+    }
+    setTimeout(()=>wrap.remove(),4000);
+  }
+
+  // ---- geometria / posição ----
+  let restX=0, restY=0;
+  function computeRest(){
+    const r = camWrap.getBoundingClientRect();
+    restX = r.width/2; restY = r.height*0.42;
+    setDicePos(restX, restY);
+    grabZone.style.left = restX+'px'; grabZone.style.top = restY+'px';
+  }
+  function setDicePos(x,y){ diceScene.style.left = x+'px'; diceScene.style.top = y+'px'; }
+  window.addEventListener('resize', computeRest);
+
+  // ---- estado do jogo ----
+  let mode = 'idle'; // idle | held | thrown | result
+  let dx=restX, dy=restY;
+  let prevPalmX=null, prevPalmY=null, prevT=null;
+  let vy=0, vx=0;
+
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+  function fistScore(lm){
+    const wrist=lm[0], midMcp=lm[9];
+    const scale = Math.hypot((wrist.x-midMcp.x), (wrist.y-midMcp.y)) || 0.001;
+    const tips=[4,8,12,16,20];
+    let sum=0;
+    tips.forEach(i=> sum += Math.hypot(lm[i].x-wrist.x, lm[i].y-wrist.y));
+    return (sum/tips.length)/scale;
+  }
+
+  function toPixels(lm){
+    const r = camWrap.getBoundingClientRect();
+    const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
+    const scale = Math.max(r.width/vw, r.height/vh);
+    const offX = (vw*scale - r.width)/2;
+    const offY = (vh*scale - r.height)/2;
+    return { x: lm.x*vw*scale - offX, y: lm.y*vh*scale - offY };
+  }
+
+  const CLOSED_T = 1.35;
+  const OPEN_T = 1.85;
+  const THROW_VY = 380; // px/s, negativo = subindo
+
+  function onResults(results){
+    if(!results.multiHandLandmarks || results.multiHandLandmarks.length===0){
+      palmDot.style.opacity = 0;
+      return;
+    }
+    const lm = results.multiHandLandmarks[0];
+    const palmRaw = { x:(lm[0].x+lm[5].x+lm[9].x+lm[13].x+lm[17].x)/5, y:(lm[0].y+lm[5].y+lm[9].y+lm[13].y+lm[17].y)/5 };
+    const p = toPixels(palmRaw);
+    const fs = fistScore(lm);
+    const now = performance.now();
+
+    palmDot.style.opacity = mode==='thrown' ? 0 : 0.9;
+    palmDot.style.left = p.x+'px';
+    palmDot.style.top = p.y+'px';
+
+    if(prevT!==null){
+      const dt = Math.max((now-prevT)/1000, 0.001);
+      vx = (p.x-prevPalmX)/dt;
+      vy = (p.y-prevPalmY)/dt;
+    }
+    prevPalmX=p.x; prevPalmY=p.y; prevT=now;
+
+    if(mode==='idle'){
+      const near = dist(p, {x:restX,y:restY}) < camWrap.clientHeight*0.16;
+      if(near && fs < CLOSED_T){
+        mode = 'held';
+        statusEl.textContent = 'Segurou! Agora jogue a mão pra cima';
+        grabZone.style.opacity = 0;
+      }
+    } else if(mode==='held'){
+      dx += (p.x-dx)*0.55; dy += (p.y-dy)*0.55;
+      setDicePos(dx,dy);
+
+      if(fs > OPEN_T){
+        if(vy < -THROW_VY){
+          const power = Math.min(2.2, Math.max(0.8, Math.abs(vy)/600));
+          throwDice(power, vx);
+        } else {
+          mode = 'idle';
+          statusEl.textContent = 'Soltou fraco — feche o punho e jogue com força pra cima';
+          grabZone.style.opacity = '';
+          animateDrop();
+        }
+      }
+    }
+  }
+
+  function animateDrop(){
+    diceScene.style.transition = 'left 0.4s ease, top 0.4s ease';
+    setDicePos(restX, restY);
+    setTimeout(()=>{ diceScene.style.transition=''; dx=restX; dy=restY; }, 420);
+  }
+
+  function spawnGhost(){
+    const g = cube.cloneNode(true);
+    g.classList.add('ghost');
+    diceScene.appendChild(g);
+    setTimeout(()=>{ g.style.transition='opacity 0.3s'; g.style.opacity='0'; }, 10);
+    setTimeout(()=> g.remove(), 320);
+  }
+
+  function throwDice(power, vxAtRelease){
+    mode = 'thrown';
+    statusEl.textContent = 'Lançando...';
+    prizeBanner.classList.remove('show');
+    cube.style.animation = 'none';
+
+    const result = 1+Math.floor(Math.random()*6);
+    const r = ROT[result];
+    const spins = 3;
+    const rx = r.x + spins*360*(Math.random()>0.5?1:-1);
+    const ry = r.y + spins*360*(Math.random()>0.5?1:-1);
+    const dur = 1.0;
+    const jumpH = camWrap.clientHeight*0.22*power;
+    const sideDrift = Math.max(-80, Math.min(80, vxAtRelease*0.15));
+
+    const startX = dx, startY = dy;
+    diceScene.style.transition = `left ${dur*0.42}s cubic-bezier(.3,.6,.4,1), top ${dur*0.42}s cubic-bezier(.3,.6,.4,1)`;
+    cube.style.transition = `transform ${dur}s cubic-bezier(.25,.6,.3,1)`;
+
+    const ghostIv = setInterval(spawnGhost, 55);
+
+    requestAnimationFrame(()=>{
+      setDicePos(startX+sideDrift, Math.max(40, startY-jumpH));
+      cube.style.transform = `rotateX(${rx*0.5}deg) rotateY(${ry*0.5}deg)`;
+    });
+
+    setTimeout(()=>{
+      diceScene.style.transition = `left ${dur*0.58}s cubic-bezier(.4,0,.6,1), top ${dur*0.58}s cubic-bezier(.4,0,.6,1)`;
+      setDicePos(restX, restY);
+      cube.style.transition = `transform ${dur*0.7}s cubic-bezier(.3,.4,.3,1)`;
+      cube.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+    }, dur*0.42*1000);
+
+    setTimeout(()=>{
+      clearInterval(ghostIv);
+      clack(0.14);
+      dx=restX; dy=restY;
+    }, dur*1000);
+
+    setTimeout(()=> finish(result), (dur+0.35)*1000);
+  }
+
+  function finish(result){
+    const prize = PRIZE_BY_FACE[result];
+    prizeIcon.textContent = prize.icon; prizeIcon.style.color = prize.color;
+    prizeLabel.textContent = prize.label; prizeLabel.style.color = prize.color;
+    prizeBanner.style.borderColor = prize.color+'80';
+    prizeBanner.classList.add('show');
+    statusEl.textContent = `Deu face ${result}!`;
+    winChime(); confetti();
+
+    setTimeout(()=>{
+      mode = 'idle';
+      cube.style.animation = 'idleBob 2.6s ease-in-out infinite';
+      prizeBanner.classList.remove('show');
+      statusEl.textContent = 'Aproxime a mão e feche o punho no dado';
+      grabZone.style.opacity = '';
+    }, 6500);
+  }
+
+  // ---- inicialização da câmera / mediapipe ----
+  function startTracking(){
+    computeRest();
+    const hands = new Hands({ locateFile: (f)=> `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands:1, modelComplexity:1, minDetectionConfidence:0.6, minTrackingConfidence:0.6 });
+    hands.onResults(onResults);
+
+    const camera = new Camera(video, {
+      onFrame: async ()=> { await hands.send({image: video}); },
+      width: 640, height: 480
+    });
+    camera.start();
+  }
+
+  permBtn.addEventListener('click', async ()=>{
+    errText.textContent = '';
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width:640, height:480 }, audio:false });
+      video.srcObject = stream;
+      await video.play();
+      permScreen.style.display = 'none';
+      startTracking();
+    }catch(e){
+      errText.textContent = 'Não consegui acessar a câmera. Verifique permissões e se a página está em HTTPS/localhost.';
+    }
+  });
+})();
+</script>
+</body>
+</html>
