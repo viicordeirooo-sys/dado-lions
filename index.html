@@ -21,60 +21,58 @@
     transform: scaleX(-1); /* espelha câmera + overlay juntos, feito espelho */
   }
   video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-  .dim { position:absolute; inset:0; background: radial-gradient(ellipse at 50% 40%, rgba(10,6,18,0.15) 0%, rgba(5,3,8,0.65) 100%); }
+  .dim { position:absolute; inset:0; background: radial-gradient(ellipse at 50% 60%, rgba(10,6,18,0.1) 0%, rgba(5,3,8,0.6) 100%); }
 
   .overlay { position:absolute; inset:0; pointer-events:none; }
 
-  .grab-zone {
-    position:absolute; width:26vh; height:26vh;
-    border-radius:50%;
-    border: 0.3vh dashed rgba(255,215,106,0.4);
+  /* luz ambiente discreta no chão, decorativa, não revela a mecânica */
+  .floor-glow {
+    position:absolute; width:34vh; height:10vh; border-radius:50%;
+    background: radial-gradient(ellipse, rgba(255,215,106,0.16) 0%, transparent 70%);
     transform: translate(-50%,-50%);
-    animation: gzPulse 2.4s ease-in-out infinite;
+    animation: glowPulse 3.2s ease-in-out infinite;
   }
-  @keyframes gzPulse { 0%,100%{ opacity:0.35; } 50%{ opacity:0.75; } }
+  @keyframes glowPulse { 0%,100%{ opacity:0.55; } 50%{ opacity:1; } }
 
-  .palm-dot {
-    position:absolute; width:2.2vh; height:2.2vh; border-radius:50%;
-    background: radial-gradient(circle, #fff4cf, #ffd76a 60%, transparent);
-    box-shadow: 0 0 2vh rgba(255,215,106,0.8);
+  .contact-shadow {
+    position:absolute; width:20vh; height:4.5vh; border-radius:50%;
+    background: rgba(0,0,0,0.55); filter: blur(1vh);
     transform: translate(-50%,-50%);
-    opacity:0;
-    transition: opacity 0.15s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease;
   }
 
-  .dice-scene { position:absolute; width:17vh; height:17vh; perspective:130vh; transform: translate(-50%,-50%); }
+  .dice-scene { position:absolute; width:22vh; height:22vh; perspective:150vh; transform: translate(-50%,-50%); }
   .cube {
-    width:17vh; height:17vh; position:relative;
+    width:22vh; height:22vh; position:relative;
     transform-style: preserve-3d;
     transform: rotateX(-15deg) rotateY(20deg);
-    animation: idleBob 2.6s ease-in-out infinite;
+    animation: idleBob 2.8s ease-in-out infinite;
   }
   @keyframes idleBob {
     0%,100% { transform: rotateX(-15deg) rotateY(20deg) translateY(0); }
-    50% { transform: rotateX(-19deg) rotateY(27deg) translateY(-1.2vh); }
+    50% { transform: rotateX(-19deg) rotateY(27deg) translateY(-1vh); }
   }
   .face {
-    position:absolute; width:17vh; height:17vh;
+    position:absolute; width:22vh; height:22vh;
     background: linear-gradient(155deg, #2a1f10 0%, #120c05 55%, #060402 100%);
     border: 0.15vh solid rgba(255,215,106,0.4);
-    border-radius:2.4vh;
-    box-shadow: inset 0 0 2.6vh rgba(0,0,0,0.6), inset 0 0.2vh 0.6vh rgba(255,233,168,0.18);
+    border-radius:2.8vh;
+    box-shadow: inset 0 0 3vh rgba(0,0,0,0.6), inset 0 0.2vh 0.7vh rgba(255,233,168,0.18);
     display:grid; grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(3,1fr);
-    padding: 2.4vh;
+    padding: 2.8vh;
   }
   .dot {
-    width:2.4vh; height:2.4vh; border-radius:50%;
+    width:2.7vh; height:2.7vh; border-radius:50%;
     background: radial-gradient(circle at 35% 30%, #fff4cf, #d4af37 60%, #8a6a1a);
-    box-shadow: 0 0 1.1vh rgba(255,215,106,0.6);
+    box-shadow: 0 0 1.2vh rgba(255,215,106,0.6);
     align-self:center; justify-self:center;
   }
-  .f-front  { transform: translateZ(8.5vh); }
-  .f-back   { transform: rotateY(180deg) translateZ(8.5vh); }
-  .f-right  { transform: rotateY(90deg) translateZ(8.5vh); }
-  .f-left   { transform: rotateY(-90deg) translateZ(8.5vh); }
-  .f-top    { transform: rotateX(90deg) translateZ(8.5vh); }
-  .f-bottom { transform: rotateX(-90deg) translateZ(8.5vh); }
+  .f-front  { transform: translateZ(11vh); }
+  .f-back   { transform: rotateY(180deg) translateZ(11vh); }
+  .f-right  { transform: rotateY(90deg) translateZ(11vh); }
+  .f-left   { transform: rotateY(-90deg) translateZ(11vh); }
+  .f-top    { transform: rotateX(90deg) translateZ(11vh); }
+  .f-bottom { transform: rotateX(-90deg) translateZ(11vh); }
   .ghost { position:absolute; inset:0; opacity:0.16; filter: blur(0.5vh); pointer-events:none; }
 
   .hud {
@@ -151,8 +149,8 @@
     <video id="video" playsinline muted></video>
     <div class="dim"></div>
     <div class="overlay" id="overlay">
-      <div class="grab-zone" id="grabZone"></div>
-      <div class="palm-dot" id="palmDot"></div>
+      <div class="floor-glow" id="floorGlow"></div>
+      <div class="contact-shadow" id="contactShadow"></div>
       <div class="dice-scene" id="diceScene">
         <div class="cube" id="cube">
           <div class="face f-front" data-v="1"></div>
@@ -171,7 +169,7 @@
       <div class="kicker">Lions · Sorte Premiada</div>
       <h1>PEGUE E LANCE O DADO</h1>
     </div>
-    <div class="status" id="status">Aproxime a mão e feche o punho no dado</div>
+    <div class="status" id="status">Agache e pegue o dado com as duas mãos</div>
   </div>
 
   <div class="bottom-hud">
@@ -183,7 +181,7 @@
 
   <div class="permission-screen" id="permScreen">
     <h2>Libere a câmera</h2>
-    <p>Esse jogo lê o movimento da sua mão pela webcam. Nada de vídeo é enviado — tudo roda no seu navegador.</p>
+    <p>Esse jogo lê o movimento das suas mãos pela webcam. Nada de vídeo é enviado — tudo roda no seu navegador.</p>
     <button class="permission-btn" id="permBtn">Ativar câmera</button>
     <div class="error-text" id="errText"></div>
   </div>
@@ -220,8 +218,8 @@
 
   const video = document.getElementById('video');
   const camWrap = document.getElementById('camWrap');
-  const grabZone = document.getElementById('grabZone');
-  const palmDot = document.getElementById('palmDot');
+  const floorGlow = document.getElementById('floorGlow');
+  const contactShadow = document.getElementById('contactShadow');
   const diceScene = document.getElementById('diceScene');
   const cube = document.getElementById('cube');
   const statusEl = document.getElementById('status');
@@ -267,13 +265,14 @@
     setTimeout(()=>wrap.remove(),4000);
   }
 
-  // ---- geometria / posição ----
+  // ---- geometria / posição (dado no CHÃO — precisa agachar) ----
   let restX=0, restY=0;
   function computeRest(){
     const r = camWrap.getBoundingClientRect();
-    restX = r.width/2; restY = r.height*0.42;
+    restX = r.width/2; restY = r.height*0.80;
     setDicePos(restX, restY);
-    grabZone.style.left = restX+'px'; grabZone.style.top = restY+'px';
+    floorGlow.style.left = restX+'px'; floorGlow.style.top = (restY+r.height*0.02)+'px';
+    contactShadow.style.left = restX+'px'; contactShadow.style.top = (restY+r.height*0.10)+'px';
   }
   function setDicePos(x,y){ diceScene.style.left = x+'px'; diceScene.style.top = y+'px'; }
   window.addEventListener('resize', computeRest);
@@ -281,8 +280,9 @@
   // ---- estado do jogo ----
   let mode = 'idle'; // idle | held | thrown | result
   let dx=restX, dy=restY;
-  let prevPalmX=null, prevPalmY=null, prevT=null;
+  let prevX=null, prevY=null, prevT=null;
   let vy=0, vx=0;
+  let lastGoodVy=0, lastGoodVyT=0;
 
   function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
   function fistScore(lm){
@@ -293,7 +293,6 @@
     tips.forEach(i=> sum += Math.hypot(lm[i].x-wrist.x, lm[i].y-wrist.y));
     return (sum/tips.length)/scale;
   }
-
   function toPixels(lm){
     const r = camWrap.getBoundingClientRect();
     const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
@@ -303,53 +302,71 @@
     return { x: lm.x*vw*scale - offX, y: lm.y*vh*scale - offY };
   }
 
-  const CLOSED_T = 1.35;
-  const OPEN_T = 1.85;
-  const THROW_VY = 380; // px/s, negativo = subindo
+  // limiares com histerese: pegar exige punho bem fechado; soltar exige abrir bastante mais
+  // (evita o dado escapar da mão com uma leve folga nos dedos)
+  const GRAB_T = 1.30;   // fechado o suficiente pra PEGAR
+  const RELEASE_T = 1.75; // só solta (sem arremesso) se abrir bem mais que isso
+  const THROW_VY = 260;   // px/s pra cima — gatilho principal do arremesso (mais tolerante)
+  const GRAB_RADIUS_FACTOR = 0.20;
 
   function onResults(results){
-    if(!results.multiHandLandmarks || results.multiHandLandmarks.length===0){
-      palmDot.style.opacity = 0;
+    const hasTwo = results.multiHandLandmarks && results.multiHandLandmarks.length >= 2;
+
+    if(!results.multiHandLandmarks || results.multiHandLandmarks.length === 0){
+      // mãos sumiram: se estava segurando e vinha subindo forte, conta como arremesso
+      if(mode==='held' && (performance.now()-lastGoodVyT) < 220 && lastGoodVy < -THROW_VY){
+        throwDice(Math.min(2.2, Math.max(0.9, Math.abs(lastGoodVy)/700)), vx);
+      }
       return;
     }
-    const lm = results.multiHandLandmarks[0];
-    const palmRaw = { x:(lm[0].x+lm[5].x+lm[9].x+lm[13].x+lm[17].x)/5, y:(lm[0].y+lm[5].y+lm[9].y+lm[13].y+lm[17].y)/5 };
-    const p = toPixels(palmRaw);
-    const fs = fistScore(lm);
+
+    const hands = results.multiHandLandmarks;
+    const palms = hands.map(lm => ({
+      x:(lm[0].x+lm[5].x+lm[9].x+lm[13].x+lm[17].x)/5,
+      y:(lm[0].y+lm[5].y+lm[9].y+lm[13].y+lm[17].y)/5,
+      fist: fistScore(lm)
+    }));
+
+    let avgRaw = { x:0, y:0 };
+    palms.forEach(p=>{ avgRaw.x+=p.x; avgRaw.y+=p.y; });
+    avgRaw.x/=palms.length; avgRaw.y/=palms.length;
+    const p = toPixels(avgRaw);
+    const bothClosed = palms.length>=2 ? (palms[0].fist<GRAB_T && palms[1].fist<GRAB_T) : (palms[0].fist<GRAB_T);
+    const anyOpenALot = palms.some(pp=> pp.fist>RELEASE_T);
+
     const now = performance.now();
-
-    palmDot.style.opacity = mode==='thrown' ? 0 : 0.9;
-    palmDot.style.left = p.x+'px';
-    palmDot.style.top = p.y+'px';
-
     if(prevT!==null){
       const dt = Math.max((now-prevT)/1000, 0.001);
-      vx = (p.x-prevPalmX)/dt;
-      vy = (p.y-prevPalmY)/dt;
+      vx = (p.x-prevX)/dt;
+      vy = (p.y-prevY)/dt;
+      if(vy < -THROW_VY){ lastGoodVy = vy; lastGoodVyT = now; }
     }
-    prevPalmX=p.x; prevPalmY=p.y; prevT=now;
+    prevX=p.x; prevY=p.y; prevT=now;
 
     if(mode==='idle'){
-      const near = dist(p, {x:restX,y:restY}) < camWrap.clientHeight*0.16;
-      if(near && fs < CLOSED_T){
-        mode = 'held';
-        statusEl.textContent = 'Segurou! Agora jogue a mão pra cima';
-        grabZone.style.opacity = 0;
+      if(hasTwo){
+        const near = dist(p, {x:restX,y:restY}) < camWrap.clientHeight*GRAB_RADIUS_FACTOR;
+        if(near && bothClosed){
+          mode = 'held';
+          statusEl.textContent = 'Segurou! Agora levanta e joga pra cima';
+        }
       }
     } else if(mode==='held'){
       dx += (p.x-dx)*0.55; dy += (p.y-dy)*0.55;
       setDicePos(dx,dy);
+      contactShadow.style.opacity = Math.max(0.15, 1 - Math.abs(dy-restY)/(camWrap.clientHeight*0.5));
 
-      if(fs > OPEN_T){
-        if(vy < -THROW_VY){
-          const power = Math.min(2.2, Math.max(0.8, Math.abs(vy)/600));
-          throwDice(power, vx);
-        } else {
-          mode = 'idle';
-          statusEl.textContent = 'Soltou fraco — feche o punho e jogue com força pra cima';
-          grabZone.style.opacity = '';
-          animateDrop();
-        }
+      // gatilho principal: velocidade pra cima (não depende de detectar dedos abertos com precisão)
+      if(vy < -THROW_VY){
+        const power = Math.min(2.2, Math.max(0.9, Math.abs(vy)/700));
+        throwDice(power, vx);
+        return;
+      }
+      // soltura suave (sem força) só derruba o dado de volta ao chão
+      if(anyOpenALot && Math.abs(vy) < THROW_VY*0.5){
+        mode = 'idle';
+        statusEl.textContent = 'Pega o dado com as duas mãos e joga com força pra cima';
+        animateDrop();
       }
     }
   }
@@ -357,6 +374,8 @@
   function animateDrop(){
     diceScene.style.transition = 'left 0.4s ease, top 0.4s ease';
     setDicePos(restX, restY);
+    contactShadow.style.transition = 'opacity 0.4s ease';
+    contactShadow.style.opacity = 1;
     setTimeout(()=>{ diceScene.style.transition=''; dx=restX; dy=restY; }, 420);
   }
 
@@ -373,6 +392,7 @@
     statusEl.textContent = 'Lançando...';
     prizeBanner.classList.remove('show');
     cube.style.animation = 'none';
+    contactShadow.style.opacity = 0;
 
     const result = 1+Math.floor(Math.random()*6);
     const r = ROT[result];
@@ -380,7 +400,7 @@
     const rx = r.x + spins*360*(Math.random()>0.5?1:-1);
     const ry = r.y + spins*360*(Math.random()>0.5?1:-1);
     const dur = 1.0;
-    const jumpH = camWrap.clientHeight*0.22*power;
+    const jumpH = camWrap.clientHeight*0.42*power;
     const sideDrift = Math.max(-80, Math.min(80, vxAtRelease*0.15));
 
     const startX = dx, startY = dy;
@@ -390,7 +410,7 @@
     const ghostIv = setInterval(spawnGhost, 55);
 
     requestAnimationFrame(()=>{
-      setDicePos(startX+sideDrift, Math.max(40, startY-jumpH));
+      setDicePos(startX+sideDrift, Math.max(camWrap.clientHeight*0.18, startY-jumpH));
       cube.style.transform = `rotateX(${rx*0.5}deg) rotateY(${ry*0.5}deg)`;
     });
 
@@ -405,6 +425,8 @@
       clearInterval(ghostIv);
       clack(0.14);
       dx=restX; dy=restY;
+      contactShadow.style.transition = 'opacity 0.2s ease';
+      contactShadow.style.opacity = 1;
     }, dur*1000);
 
     setTimeout(()=> finish(result), (dur+0.35)*1000);
@@ -421,10 +443,9 @@
 
     setTimeout(()=>{
       mode = 'idle';
-      cube.style.animation = 'idleBob 2.6s ease-in-out infinite';
+      cube.style.animation = 'idleBob 2.8s ease-in-out infinite';
       prizeBanner.classList.remove('show');
-      statusEl.textContent = 'Aproxime a mão e feche o punho no dado';
-      grabZone.style.opacity = '';
+      statusEl.textContent = 'Agache e pegue o dado com as duas mãos';
     }, 6500);
   }
 
@@ -432,7 +453,7 @@
   function startTracking(){
     computeRest();
     const hands = new Hands({ locateFile: (f)=> `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-    hands.setOptions({ maxNumHands:1, modelComplexity:1, minDetectionConfidence:0.6, minTrackingConfidence:0.6 });
+    hands.setOptions({ maxNumHands:2, modelComplexity:1, minDetectionConfidence:0.6, minTrackingConfidence:0.6 });
     hands.onResults(onResults);
 
     const camera = new Camera(video, {
