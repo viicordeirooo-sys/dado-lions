@@ -231,6 +231,15 @@
   @keyframes coinFall {
     to { transform: translateY(120vh) rotate(720deg); opacity:0.15; }
   }
+
+  .debug-panel {
+    position:fixed; left:1vh; bottom:1vh; z-index:99;
+    background: rgba(0,0,0,0.75); border:1px solid rgba(255,215,106,0.4);
+    border-radius:1vh; padding:1.2vh 1.6vh;
+    font-family: monospace; font-size:1.5vh; line-height:1.7;
+    color:#9fffb0; white-space:pre; pointer-events:none;
+    max-width:44vh;
+  }
 </style>
 </head>
 <body>
@@ -287,6 +296,8 @@
     </div>
     <div class="countdown-bar"><div class="countdown-fill" id="countdownFill"></div></div>
   </div>
+
+  <div class="debug-panel" id="debugPanel" style="display:none;"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -333,6 +344,9 @@
   const permScreen = document.getElementById('permScreen');
   const permBtn = document.getElementById('permBtn');
   const errText = document.getElementById('errText');
+  const debugPanel = document.getElementById('debugPanel');
+  const DEBUG = new URLSearchParams(location.search).has('debug');
+  if(DEBUG) debugPanel.style.display = 'block';
 
   // ---- som sintetizado ----
   let actx=null;
@@ -494,12 +508,20 @@
       if(prevPalmsTracked && prevPalmsTracked.length===2){
         const costSame = dist(palms[0],prevPalmsTracked[0]) + dist(palms[1],prevPalmsTracked[1]);
         const costSwap = dist(palms[0],prevPalmsTracked[1]) + dist(palms[1],prevPalmsTracked[0]);
-        if(costSwap < costSame) ordered = [palms[1], palms[0]];
+        // só troca se for CLARAMENTE melhor (histerese) — evita ficar trocando identidade
+        // das mãos em frames ambíguos, o que gerava picos falsos de velocidade
+        if(costSwap < costSame*0.6) ordered = [palms[1], palms[0]];
 
         const dt = Math.max((now-prevT)/1000, 0.001);
+        const teleportLimit = camWrap.clientHeight*0.13; // deslocamento maior que isso num frame só = leitura ruim, ignora
         for(let i=0;i<2;i++){
-          const vyRaw = (ordered[i].y - prevPalmsTracked[i].y)/dt;
-          smoothVy[i] = smoothVy[i]*0.55 + vyRaw*0.45; // suaviza — filtra tremedeira de 1 frame
+          const d = dist(ordered[i], prevPalmsTracked[i]);
+          if(d < teleportLimit){
+            const vyRaw = (ordered[i].y - prevPalmsTracked[i].y)/dt;
+            smoothVy[i] = smoothVy[i]*0.55 + vyRaw*0.45; // suaviza — filtra tremedeira de 1 frame
+          } else {
+            smoothVy[i] *= 0.5; // leitura suspeita: decai em vez de confiar nela
+          }
         }
         bothMovingUp = smoothVy[0] < -camWrap.clientHeight*SMOOTH_VY_FACTOR && smoothVy[1] < -camWrap.clientHeight*SMOOTH_VY_FACTOR;
         bothMovingDown = smoothVy[0] > camWrap.clientHeight*SMOOTH_VY_FACTOR && smoothVy[1] > camWrap.clientHeight*SMOOTH_VY_FACTOR;
@@ -515,6 +537,19 @@
       vy = (p.y-prevY)/dt;
     }
     prevX=p.x; prevY=p.y; prevT=now;
+
+    if(DEBUG){
+      const h = camWrap.clientHeight;
+      debugPanel.textContent =
+        `mode: ${mode}\n`+
+        `mãos detectadas: ${palms.length}\n`+
+        `smoothVy: [${smoothVy[0].toFixed(0)}, ${smoothVy[1].toFixed(0)}] px/s\n`+
+        `limiar subir/descer: ±${(h*SMOOTH_VY_FACTOR).toFixed(0)} px/s\n`+
+        `bothMovingUp: ${bothMovingUp}  bothMovingDown: ${bothMovingDown}\n`+
+        `heldSince: ${heldSince?((now-heldSince).toFixed(0)+'ms'):'-'}  (min ${MIN_HOLD_MS}ms)\n`+
+        `upStreak: ${upStreakStart?((now-upStreakStart).toFixed(0)+'ms'):'-'}  (min ${UP_SUSTAIN_MS}ms)\n`+
+        `distância mãos↔dado: ${mode==='held'?dist(p,{x:dx,y:dy}).toFixed(0):'-'}px  (solta > ${(h*HOLD_RADIUS_FACTOR).toFixed(0)}px)`;
+    }
 
     if(mode==='idle'){
       if(hasTwo){
@@ -556,23 +591,23 @@
       contactShadow.style.opacity = Math.max(0.15, 1 - Math.abs(targetY-restY)/(camWrap.clientHeight*0.5));
 
       // gatilho com sentido: as DUAS mãos precisam estar subindo JUNTAS (movimento real,
-      // suavizado por mão) de forma contínua por um tempinho, cobrindo distância mínima real
+      // suavizado por mão) de forma contínua por um tempinho, cobrindo distância mínima real.
+      // a contagem só COMEÇA depois da janela mínima de segurar — nada do gesto de pegar
+      // (que naturalmente tem um pouco de movimento residual) pode contar como arremesso
       const heldLongEnough = heldSince && (now - heldSince) > MIN_HOLD_MS;
 
-      if(bothMovingUp){
+      if(heldLongEnough && bothMovingUp){
         if(upStreakStart===null){ upStreakStart = now; upStreakStartDy = p.y; }
         lastUpMotionT = now;
+      } else if(!heldLongEnough){
+        upStreakStart = null; upStreakStartDy = null; // ainda na janela de proteção: nunca acumula
       } else {
         upStreakStart = null; upStreakStartDy = null;
       }
       const streakSustained = upStreakStart!==null && (now-upStreakStart) >= UP_SUSTAIN_MS;
       const streakLifted = upStreakStart!==null && (upStreakStartDy - p.y) > camWrap.clientHeight*UP_LIFT_FACTOR;
 
-      // subida válida = intenção de jogar; se veio antes do tempo mínimo, fica LATCHED
-      // e dispara assim que o tempo vencer (nunca descarta o primeiro arremesso)
-      if(streakSustained && streakLifted) pendingThrow = true;
-
-      if(pendingThrow && heldLongEnough){
+      if(heldLongEnough && streakSustained && streakLifted){
         throwDice(1.3, vx);
         return;
       }
