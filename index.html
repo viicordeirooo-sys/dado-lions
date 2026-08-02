@@ -433,7 +433,7 @@
   const CAMERA_WARMUP_MS = 1300;     // ignora leituras logo após ligar a câmera (foco/exposição instáveis)
   const UP_SUSTAIN_MS = 130;         // as DUAS mãos precisam estar subindo juntas por esse tempo
   const UP_LIFT_FACTOR = 0.045;      // e ter percorrido pelo menos esse tanto da tela nesse intervalo
-  const SMOOTH_VY_THRESH = 90;       // px/s (já suavizado) — considera "subindo" acima disso
+  const SMOOTH_VY_FACTOR = 0.11;     // fração da altura da tela por segundo (relativo, não pixels fixos — consistente em qualquer tela/dispositivo)
 
   let nearSince = null;
   let heldSince = null;
@@ -487,7 +487,7 @@
           const vyRaw = (ordered[i].y - prevPalmsTracked[i].y)/dt;
           smoothVy[i] = smoothVy[i]*0.55 + vyRaw*0.45; // suaviza — filtra tremedeira de 1 frame
         }
-        bothMovingUp = smoothVy[0] < -SMOOTH_VY_THRESH && smoothVy[1] < -SMOOTH_VY_THRESH;
+        bothMovingUp = smoothVy[0] < -camWrap.clientHeight*SMOOTH_VY_FACTOR && smoothVy[1] < -camWrap.clientHeight*SMOOTH_VY_FACTOR;
       }
       prevPalmsTracked = ordered;
     } else {
