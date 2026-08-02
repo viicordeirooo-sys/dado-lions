@@ -140,6 +140,97 @@
   .confetti { position:fixed; inset:0; pointer-events:none; z-index:30; }
   .confetti span { position:absolute; top:-10px; border-radius:2px; animation: fall linear forwards; }
   @keyframes fall { to { transform: translateY(110vh) rotate(540deg); opacity:0.2; } }
+
+  /* ---------- TELA DE PRÊMIO ---------- */
+  .prize-screen {
+    position:fixed; inset:0; z-index:50;
+    display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(ellipse at 50% 45%, rgba(36,19,56,0.75) 0%, rgba(3,2,4,0.94) 75%);
+    opacity:0; pointer-events:none;
+    transition: opacity 0.35s ease;
+    overflow:hidden;
+  }
+  .prize-screen.show { opacity:1; }
+
+  .rays {
+    position:absolute; left:50%; top:50%; width:180vh; height:180vh;
+    transform: translate(-50%,-50%);
+    background: conic-gradient(from 0deg,
+      rgba(255,215,106,0.16) 0deg, transparent 10deg,
+      transparent 20deg, rgba(255,215,106,0.10) 30deg,
+      transparent 40deg, transparent 50deg,
+      rgba(255,215,106,0.16) 60deg, transparent 70deg,
+      transparent 80deg, rgba(255,215,106,0.10) 90deg,
+      transparent 100deg, transparent 110deg,
+      rgba(255,215,106,0.16) 120deg, transparent 130deg,
+      transparent 140deg, rgba(255,215,106,0.10) 150deg,
+      transparent 160deg, transparent 170deg,
+      rgba(255,215,106,0.16) 180deg, transparent 190deg,
+      transparent 200deg, rgba(255,215,106,0.10) 210deg,
+      transparent 220deg, transparent 230deg,
+      rgba(255,215,106,0.16) 240deg, transparent 250deg,
+      transparent 260deg, rgba(255,215,106,0.10) 270deg,
+      transparent 280deg, transparent 290deg,
+      rgba(255,215,106,0.16) 300deg, transparent 310deg,
+      transparent 320deg, rgba(255,215,106,0.10) 330deg,
+      transparent 340deg, transparent 350deg, rgba(255,215,106,0.16) 360deg);
+    animation: raysSpin 14s linear infinite;
+  }
+  @keyframes raysSpin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+  .prize-content { position:relative; display:flex; flex-direction:column; align-items:center; gap:1.4vh; }
+
+  .win-title {
+    font-size: 3vh; font-weight:800; letter-spacing:0.8vh;
+    color: transparent;
+    background: linear-gradient(135deg, #fff4cf, #ffd76a 40%, #d4af37 70%, #fff4cf);
+    background-size: 200% auto;
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    animation: shimmer 2.4s linear infinite, titleDrop 0.5s cubic-bezier(.2,1.4,.4,1);
+    text-shadow: 0 0 3vh rgba(255,215,106,0.4);
+  }
+  @keyframes shimmer { to { background-position: 200% center; } }
+  @keyframes titleDrop { 0%{ opacity:0; transform: translateY(-1.4vh); } 100%{ opacity:1; transform: translateY(0); } }
+
+  .prize-icon-big {
+    font-size: 16vh; line-height:1;
+    filter: drop-shadow(0 0 4vh currentColor);
+    animation: iconPop 0.6s cubic-bezier(.2,1.7,.3,1), iconFloat 2.4s ease-in-out 0.6s infinite;
+  }
+  @keyframes iconPop { 0%{ transform: scale(0) rotate(-25deg); opacity:0; } 70%{ transform: scale(1.15) rotate(6deg); opacity:1; } 100%{ transform: scale(1) rotate(0deg); } }
+  @keyframes iconFloat { 0%,100%{ transform: translateY(0); } 50%{ transform: translateY(-1.6vh); } }
+
+  .prize-label-big {
+    font-size: 5.4vh; font-weight:800; letter-spacing:0.2vh; text-align:center;
+    text-shadow: 0 0 3vh currentColor;
+    animation: titleDrop 0.6s cubic-bezier(.2,1.4,.4,1) 0.15s backwards;
+  }
+
+  .prize-sub {
+    font-size: 1.8vh; color: rgba(255,255,255,0.5); letter-spacing:0.3vh;
+    animation: titleDrop 0.6s cubic-bezier(.2,1.4,.4,1) 0.25s backwards;
+  }
+
+  .countdown-bar {
+    position:absolute; left:8vw; right:8vw; bottom:4vh;
+    height:0.5vh; border-radius:1vh;
+    background: rgba(255,255,255,0.12);
+    overflow:hidden;
+  }
+  .countdown-fill {
+    height:100%; width:100%;
+    background: linear-gradient(90deg, #ffd76a, #d4af37);
+    transform-origin: left;
+  }
+
+  .coin {
+    position:absolute; top:-6vh; font-size: 3vh;
+    filter: drop-shadow(0 0 1vh rgba(255,215,106,0.6));
+    animation: coinFall linear forwards;
+  }
+  @keyframes coinFall {
+    to { transform: translateY(120vh) rotate(720deg); opacity:0.15; }
+  }
 </style>
 </head>
 <body>
@@ -185,6 +276,17 @@
     <button class="permission-btn" id="permBtn">Ativar câmera</button>
     <div class="error-text" id="errText"></div>
   </div>
+
+  <div class="prize-screen" id="prizeScreen">
+    <div class="rays"></div>
+    <div class="prize-content">
+      <div class="win-title">VOCÊ GANHOU</div>
+      <div class="prize-icon-big" id="prizeIconBig">🎰</div>
+      <div class="prize-label-big" id="prizeLabelBig">—</div>
+      <div class="prize-sub" id="prizeSub">Face —</div>
+    </div>
+    <div class="countdown-bar"><div class="countdown-fill" id="countdownFill"></div></div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -223,9 +325,11 @@
   const diceScene = document.getElementById('diceScene');
   const cube = document.getElementById('cube');
   const statusEl = document.getElementById('status');
-  const prizeBanner = document.getElementById('prizeBanner');
-  const prizeIcon = document.getElementById('prizeIcon');
-  const prizeLabel = document.getElementById('prizeLabel');
+  const prizeBanner = document.getElementById('prizeScreen');
+  const prizeIcon = document.getElementById('prizeIconBig');
+  const prizeLabel = document.getElementById('prizeLabelBig');
+  const prizeSub = document.getElementById('prizeSub');
+  const countdownFill = document.getElementById('countdownFill');
   const permScreen = document.getElementById('permScreen');
   const permBtn = document.getElementById('permBtn');
   const errText = document.getElementById('errText');
@@ -265,6 +369,22 @@
     setTimeout(()=>wrap.remove(),4000);
   }
 
+  let coinRainIv = null;
+  function startCoinRain(){
+    stopCoinRain();
+    coinRainIv = setInterval(()=>{
+      const c = document.createElement('div');
+      c.className = 'coin';
+      c.textContent = Math.random()>0.5 ? '🪙' : '✨';
+      c.style.left = Math.random()*100+'vw';
+      c.style.animationDuration = (2.2+Math.random()*1.6)+'s';
+      c.style.fontSize = (2+Math.random()*2.4)+'vh';
+      prizeBanner.appendChild(c);
+      setTimeout(()=>c.remove(), 4000);
+    }, 140);
+  }
+  function stopCoinRain(){ if(coinRainIv){ clearInterval(coinRainIv); coinRainIv=null; } }
+
   // ---- geometria / posição (dado no CHÃO — precisa agachar) ----
   let restX=0, restY=0;
   function computeRest(){
@@ -303,36 +423,42 @@
   }
 
   // detecção simplificada: não depende mais de ler punho fechado —
-  // só precisa das DUAS mãos presentes e próximas do dado por um instante
-  const THROW_VY = 260;        // px/s pra cima — gatilho do arremesso
-  const GRAB_RADIUS_FACTOR = 0.20;   // raio pra CONSIDERAR que pegou
+  // exige as DUAS mãos (cada uma) perto do dado, paradas, por um tempo sustentado
+  const THROW_VY = 340;              // px/s pra cima — gatilho do arremesso
+  const GRAB_RADIUS_FACTOR = 0.15;   // raio por mão pra CONSIDERAR que pegou (mais apertado)
+  const HANDS_TOGETHER_FACTOR = 0.22;// as duas mãos precisam estar próximas uma da outra
   const HOLD_RADIUS_FACTOR = 0.32;   // raio pra CONTINUAR segurando (mais folgado)
-  const GRAB_SUSTAIN_MS = 180;       // as duas mãos precisam estar perto por esse tempo seguido
+  const GRAB_SUSTAIN_MS = 380;       // as duas mãos precisam ficar paradas e perto por esse tempo
+  const GRAB_STILL_VY = 220;         // velocidade máxima permitida durante a "pegada" (senão é só passagem)
+  const MIN_HOLD_MS = 420;           // tempo mínimo segurando antes de aceitar o arremesso
 
   let nearSince = null;
+  let heldSince = null;
 
   function onResults(results){
     const hasTwo = results.multiHandLandmarks && results.multiHandLandmarks.length >= 2;
 
     if(!results.multiHandLandmarks || results.multiHandLandmarks.length === 0){
       nearSince = null;
-      // mãos sumiram: se estava segurando e vinha subindo forte, conta como arremesso
-      if(mode==='held' && (performance.now()-lastGoodVyT) < 220 && lastGoodVy < -THROW_VY){
+      // mãos sumiram: só conta como arremesso se já estava segurando por tempo suficiente
+      if(mode==='held' && heldSince && (performance.now()-heldSince)>MIN_HOLD_MS &&
+         (performance.now()-lastGoodVyT) < 220 && lastGoodVy < -THROW_VY){
         throwDice(Math.min(2.2, Math.max(0.9, Math.abs(lastGoodVy)/700)), vx);
       }
       return;
     }
 
     const hands = results.multiHandLandmarks;
-    const palms = hands.map(lm => ({
+    const palmsRaw = hands.map(lm => ({
       x:(lm[0].x+lm[5].x+lm[9].x+lm[13].x+lm[17].x)/5,
       y:(lm[0].y+lm[5].y+lm[9].y+lm[13].y+lm[17].y)/5,
     }));
+    const palms = palmsRaw.map(toPixels);
 
-    let avgRaw = { x:0, y:0 };
-    palms.forEach(p=>{ avgRaw.x+=p.x; avgRaw.y+=p.y; });
-    avgRaw.x/=palms.length; avgRaw.y/=palms.length;
-    const p = toPixels(avgRaw);
+    let avg = { x:0, y:0 };
+    palms.forEach(p=>{ avg.x+=p.x; avg.y+=p.y; });
+    avg.x/=palms.length; avg.y/=palms.length;
+    const p = avg;
 
     const now = performance.now();
     if(prevT!==null){
@@ -345,12 +471,17 @@
 
     if(mode==='idle'){
       if(hasTwo){
-        const dicePos = mode==='idle' ? {x:restX,y:restY} : {x:dx,y:dy};
-        const near = dist(p, dicePos) < camWrap.clientHeight*GRAB_RADIUS_FACTOR;
-        if(near){
+        const dicePos = {x:restX,y:restY};
+        // cada mão precisa estar perto do dado, e as duas mãos precisam estar próximas entre si
+        const eachNear = palms.every(hp => dist(hp, dicePos) < camWrap.clientHeight*GRAB_RADIUS_FACTOR);
+        const together = dist(palms[0], palms[1]) < camWrap.clientHeight*HANDS_TOGETHER_FACTOR;
+        const still = Math.abs(vy) < GRAB_STILL_VY && Math.abs(vx) < GRAB_STILL_VY;
+
+        if(eachNear && together && still){
           if(nearSince===null) nearSince = now;
           if(now - nearSince >= GRAB_SUSTAIN_MS){
             mode = 'held';
+            heldSince = now;
             statusEl.textContent = 'Segurou! Agora levanta e joga pra cima';
             nearSince = null;
           }
@@ -365,8 +496,9 @@
       setDicePos(dx,dy);
       contactShadow.style.opacity = Math.max(0.15, 1 - Math.abs(dy-restY)/(camWrap.clientHeight*0.5));
 
-      // gatilho principal: velocidade pra cima
-      if(vy < -THROW_VY){
+      // gatilho principal: velocidade pra cima — só vale depois de já ter segurado um tempo mínimo
+      const heldLongEnough = heldSince && (now - heldSince) > MIN_HOLD_MS;
+      if(heldLongEnough && vy < -THROW_VY){
         const power = Math.min(2.2, Math.max(0.9, Math.abs(vy)/700));
         throwDice(power, vx);
         return;
@@ -375,6 +507,7 @@
       const farFromDice = !hasTwo || dist(p, {x:dx,y:dy}) > camWrap.clientHeight*HOLD_RADIUS_FACTOR;
       if(farFromDice && Math.abs(vy) < THROW_VY*0.5){
         mode = 'idle';
+        heldSince = null;
         statusEl.textContent = 'Pega o dado com as duas mãos e joga com força pra cima';
         animateDrop();
       }
@@ -399,6 +532,7 @@
 
   function throwDice(power, vxAtRelease){
     mode = 'thrown';
+    heldSince = null;
     statusEl.textContent = 'Lançando...';
     prizeBanner.classList.remove('show');
     cube.style.animation = 'none';
@@ -446,15 +580,24 @@
     const prize = PRIZE_BY_FACE[result];
     prizeIcon.textContent = prize.icon; prizeIcon.style.color = prize.color;
     prizeLabel.textContent = prize.label; prizeLabel.style.color = prize.color;
-    prizeBanner.style.borderColor = prize.color+'80';
+    prizeSub.textContent = `Face ${result}`;
     prizeBanner.classList.add('show');
+
+    countdownFill.style.transition = 'none';
+    countdownFill.style.transform = 'scaleX(1)';
+    void countdownFill.offsetWidth;
+    countdownFill.style.transition = 'transform 10s linear';
+    countdownFill.style.transform = 'scaleX(0)';
+
     statusEl.textContent = `Deu face ${result}!`;
-    winChime(); confetti();
+    winChime(); confetti(); startCoinRain();
+    heldSince = null;
 
     setTimeout(()=>{
       mode = 'idle';
       cube.style.animation = 'idleBob 2.8s ease-in-out infinite';
       prizeBanner.classList.remove('show');
+      stopCoinRain();
       statusEl.textContent = 'Agache e pegue o dado com as duas mãos';
     }, 10000);
   }
