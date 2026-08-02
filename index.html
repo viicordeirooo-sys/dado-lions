@@ -431,14 +431,21 @@
   const MIN_HOLD_MS = 300;           // tempo mínimo segurando antes de aceitar o arremesso (só pra não jogar no mesmo instante que pega)
 
   const CAMERA_WARMUP_MS = 1300;     // ignora leituras logo após ligar a câmera (foco/exposição instáveis)
-  const UP_SUSTAIN_MS = 150;         // a mão precisa estar subindo continuamente por esse tempo
-  const UP_LIFT_FACTOR = 0.055;      // e ter percorrido pelo menos esse tanto da tela nesse intervalo (filtra tremedeira/ruído)
+  const UP_SUSTAIN_MS = 130;         // as DUAS mãos precisam estar subindo juntas por esse tempo
+  const UP_LIFT_FACTOR = 0.045;      // e ter percorrido pelo menos esse tanto da tela nesse intervalo
+  const SMOOTH_VY_THRESH = 90;       // px/s (já suavizado) — considera "subindo" acima disso
 
   let nearSince = null;
   let heldSince = null;
   let cameraStartTime = 0;
-  let upStreakStart = null;   // quando a subida contínua começou
-  let upStreakStartDy = null; // posição y no início da subida contínua
+  let upStreakStart = null;   // quando a subida contínua das DUAS mãos começou
+  let upStreakStartDy = null; // posição y média no início da subida contínua
+
+  // rastreio por mão (não pela posição combinada) — cada mão mantém sua própria
+  // velocidade vertical suavizada, casada frame a frame por proximidade (evita
+  // trocar de mão quando o MediaPipe reordena a lista)
+  let prevPalmsTracked = null;
+  let smoothVy = [0,0];
 
   function onResults(results){
     if((performance.now()-cameraStartTime) < CAMERA_WARMUP_MS) return; // câmera ainda estabilizando
@@ -447,6 +454,7 @@
 
     if(!results.multiHandLandmarks || results.multiHandLandmarks.length === 0){
       nearSince = null;
+      prevPalmsTracked = null; smoothVy=[0,0];
       return;
     }
 
@@ -463,6 +471,29 @@
     const p = avg;
 
     const now = performance.now();
+
+    // casa cada mão detectada com a mesma "mão" do frame anterior (por proximidade),
+    // pra medir a velocidade real de CADA mão em vez de uma média que mascara ruído
+    let bothMovingUp = false;
+    if(palms.length===2){
+      let ordered = palms;
+      if(prevPalmsTracked && prevPalmsTracked.length===2){
+        const costSame = dist(palms[0],prevPalmsTracked[0]) + dist(palms[1],prevPalmsTracked[1]);
+        const costSwap = dist(palms[0],prevPalmsTracked[1]) + dist(palms[1],prevPalmsTracked[0]);
+        if(costSwap < costSame) ordered = [palms[1], palms[0]];
+
+        const dt = Math.max((now-prevT)/1000, 0.001);
+        for(let i=0;i<2;i++){
+          const vyRaw = (ordered[i].y - prevPalmsTracked[i].y)/dt;
+          smoothVy[i] = smoothVy[i]*0.55 + vyRaw*0.45; // suaviza — filtra tremedeira de 1 frame
+        }
+        bothMovingUp = smoothVy[0] < -SMOOTH_VY_THRESH && smoothVy[1] < -SMOOTH_VY_THRESH;
+      }
+      prevPalmsTracked = ordered;
+    } else {
+      prevPalmsTracked = null; smoothVy=[0,0];
+    }
+
     if(prevT!==null){
       const dt = Math.max((now-prevT)/1000, 0.001);
       vx = (p.x-prevX)/dt;
@@ -490,6 +521,7 @@
             statusEl.textContent = 'Segurou! Mexe a mão pra girar, levanta pra jogar';
             nearSince = null;
             upStreakStart = null; upStreakStartDy = null;
+            smoothVy = [0,0];
           }
         } else {
           nearSince = null;
@@ -508,11 +540,11 @@
       cubeRotX = Math.max(-70, Math.min(20, cubeRotX - dyDelta*0.25));
       cube.style.transform = `rotateX(${cubeRotX}deg) rotateY(${cubeRotY}deg)`;
 
-      // gatilho com sentido: precisa de movimento CONTÍNUO pra cima (não troca de direção)
-      // por um tempinho, cobrindo uma distância mínima real — filtra tremedeira/ruído
+      // gatilho com sentido: as DUAS mãos precisam estar subindo JUNTAS (movimento real,
+      // suavizado por mão) de forma contínua por um tempinho, cobrindo distância mínima real
       const heldLongEnough = heldSince && (now - heldSince) > MIN_HOLD_MS;
 
-      if(vy < -30){ // subindo (limiar bem baixo, só ignora ruído puro)
+      if(bothMovingUp){
         if(upStreakStart===null){ upStreakStart = now; upStreakStartDy = p.y; }
       } else {
         upStreakStart = null; upStreakStartDy = null;
