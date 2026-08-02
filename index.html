@@ -302,17 +302,20 @@
     return { x: lm.x*vw*scale - offX, y: lm.y*vh*scale - offY };
   }
 
-  // limiares com histerese: pegar exige punho bem fechado; soltar exige abrir bastante mais
-  // (evita o dado escapar da mão com uma leve folga nos dedos)
-  const GRAB_T = 1.30;   // fechado o suficiente pra PEGAR
-  const RELEASE_T = 1.75; // só solta (sem arremesso) se abrir bem mais que isso
-  const THROW_VY = 260;   // px/s pra cima — gatilho principal do arremesso (mais tolerante)
-  const GRAB_RADIUS_FACTOR = 0.20;
+  // detecção simplificada: não depende mais de ler punho fechado —
+  // só precisa das DUAS mãos presentes e próximas do dado por um instante
+  const THROW_VY = 260;        // px/s pra cima — gatilho do arremesso
+  const GRAB_RADIUS_FACTOR = 0.20;   // raio pra CONSIDERAR que pegou
+  const HOLD_RADIUS_FACTOR = 0.32;   // raio pra CONTINUAR segurando (mais folgado)
+  const GRAB_SUSTAIN_MS = 180;       // as duas mãos precisam estar perto por esse tempo seguido
+
+  let nearSince = null;
 
   function onResults(results){
     const hasTwo = results.multiHandLandmarks && results.multiHandLandmarks.length >= 2;
 
     if(!results.multiHandLandmarks || results.multiHandLandmarks.length === 0){
+      nearSince = null;
       // mãos sumiram: se estava segurando e vinha subindo forte, conta como arremesso
       if(mode==='held' && (performance.now()-lastGoodVyT) < 220 && lastGoodVy < -THROW_VY){
         throwDice(Math.min(2.2, Math.max(0.9, Math.abs(lastGoodVy)/700)), vx);
@@ -324,15 +327,12 @@
     const palms = hands.map(lm => ({
       x:(lm[0].x+lm[5].x+lm[9].x+lm[13].x+lm[17].x)/5,
       y:(lm[0].y+lm[5].y+lm[9].y+lm[13].y+lm[17].y)/5,
-      fist: fistScore(lm)
     }));
 
     let avgRaw = { x:0, y:0 };
     palms.forEach(p=>{ avgRaw.x+=p.x; avgRaw.y+=p.y; });
     avgRaw.x/=palms.length; avgRaw.y/=palms.length;
     const p = toPixels(avgRaw);
-    const bothClosed = palms.length>=2 ? (palms[0].fist<GRAB_T && palms[1].fist<GRAB_T) : (palms[0].fist<GRAB_T);
-    const anyOpenALot = palms.some(pp=> pp.fist>RELEASE_T);
 
     const now = performance.now();
     if(prevT!==null){
@@ -345,25 +345,35 @@
 
     if(mode==='idle'){
       if(hasTwo){
-        const near = dist(p, {x:restX,y:restY}) < camWrap.clientHeight*GRAB_RADIUS_FACTOR;
-        if(near && bothClosed){
-          mode = 'held';
-          statusEl.textContent = 'Segurou! Agora levanta e joga pra cima';
+        const dicePos = mode==='idle' ? {x:restX,y:restY} : {x:dx,y:dy};
+        const near = dist(p, dicePos) < camWrap.clientHeight*GRAB_RADIUS_FACTOR;
+        if(near){
+          if(nearSince===null) nearSince = now;
+          if(now - nearSince >= GRAB_SUSTAIN_MS){
+            mode = 'held';
+            statusEl.textContent = 'Segurou! Agora levanta e joga pra cima';
+            nearSince = null;
+          }
+        } else {
+          nearSince = null;
         }
+      } else {
+        nearSince = null;
       }
     } else if(mode==='held'){
       dx += (p.x-dx)*0.55; dy += (p.y-dy)*0.55;
       setDicePos(dx,dy);
       contactShadow.style.opacity = Math.max(0.15, 1 - Math.abs(dy-restY)/(camWrap.clientHeight*0.5));
 
-      // gatilho principal: velocidade pra cima (não depende de detectar dedos abertos com precisão)
+      // gatilho principal: velocidade pra cima
       if(vy < -THROW_VY){
         const power = Math.min(2.2, Math.max(0.9, Math.abs(vy)/700));
         throwDice(power, vx);
         return;
       }
-      // soltura suave (sem força) só derruba o dado de volta ao chão
-      if(anyOpenALot && Math.abs(vy) < THROW_VY*0.5){
+      // se as mãos se afastam do dado sem ser um arremesso, solta suave de volta
+      const farFromDice = !hasTwo || dist(p, {x:dx,y:dy}) > camWrap.clientHeight*HOLD_RADIUS_FACTOR;
+      if(farFromDice && Math.abs(vy) < THROW_VY*0.5){
         mode = 'idle';
         statusEl.textContent = 'Pega o dado com as duas mãos e joga com força pra cima';
         animateDrop();
@@ -396,10 +406,10 @@
 
     const result = 1+Math.floor(Math.random()*6);
     const r = ROT[result];
-    const spins = 3;
+    const spins = 9 + Math.floor(Math.random()*3); // mais voltas pra preencher os 3~4s de giro
     const rx = r.x + spins*360*(Math.random()>0.5?1:-1);
     const ry = r.y + spins*360*(Math.random()>0.5?1:-1);
-    const dur = 1.0;
+    const dur = 3.2 + Math.random()*0.8; // 3.2 a 4.0s
     const jumpH = camWrap.clientHeight*0.42*power;
     const sideDrift = Math.max(-80, Math.min(80, vxAtRelease*0.15));
 
@@ -407,7 +417,7 @@
     diceScene.style.transition = `left ${dur*0.42}s cubic-bezier(.3,.6,.4,1), top ${dur*0.42}s cubic-bezier(.3,.6,.4,1)`;
     cube.style.transition = `transform ${dur}s cubic-bezier(.25,.6,.3,1)`;
 
-    const ghostIv = setInterval(spawnGhost, 55);
+    const ghostIv = setInterval(spawnGhost, 90);
 
     requestAnimationFrame(()=>{
       setDicePos(startX+sideDrift, Math.max(camWrap.clientHeight*0.18, startY-jumpH));
@@ -446,7 +456,7 @@
       cube.style.animation = 'idleBob 2.8s ease-in-out infinite';
       prizeBanner.classList.remove('show');
       statusEl.textContent = 'Agache e pegue o dado com as duas mãos';
-    }, 6500);
+    }, 10000);
   }
 
   // ---- inicialização da câmera / mediapipe ----
