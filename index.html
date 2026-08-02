@@ -402,6 +402,7 @@
   let dx=restX, dy=restY;
   let prevX=null, prevY=null, prevT=null;
   let vy=0, vx=0;
+  let cubeRotX=-15, cubeRotY=20;
 
   function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
   function fistScore(lm){
@@ -430,7 +431,7 @@
   const GRAB_STILL_VY = 220;         // velocidade máxima permitida durante a "pegada" (senão é só passagem)
   const MIN_HOLD_MS = 420;           // tempo mínimo segurando antes de aceitar o arremesso
   const CAMERA_WARMUP_MS = 1300;     // ignora leituras logo após ligar a câmera (foco/exposição instáveis)
-  const LIFT_FACTOR = 0.35;          // arremesso independe de força: precisa subir ~altura do peito (estimativa, sem rastrear corpo/ombros — ajustar conforme o enquadramento real da câmera)
+  const LIFT_FACTOR = 0.22;          // arremesso independe de força: precisa subir esse tanto (estimativa, sem rastrear corpo/ombros — ajustar conforme o enquadramento real da câmera)
 
   let nearSince = null;
   let heldSince = null;
@@ -479,7 +480,12 @@
           if(now - nearSince >= GRAB_SUSTAIN_MS){
             mode = 'held';
             heldSince = now;
-            statusEl.textContent = 'Segurou! Agora levanta o braço';
+            // nasce já na posição real da mão — sem "esticar" suavemente até lá (evita o pulo)
+            dx = p.x; dy = p.y;
+            cube.style.animation = 'none';
+            cubeRotX = -15; cubeRotY = 20;
+            cube.style.transform = `rotateX(${cubeRotX}deg) rotateY(${cubeRotY}deg)`;
+            statusEl.textContent = 'Segurou! Mexe a mão pra girar, levanta pra jogar';
             nearSince = null;
           }
         } else {
@@ -489,9 +495,15 @@
         nearSince = null;
       }
     } else if(mode==='held'){
-      dx += (p.x-dx)*0.55; dy += (p.y-dy)*0.55;
+      const dxDelta = p.x - dx, dyDelta = p.y - dy;
+      dx += dxDelta*0.55; dy += dyDelta*0.55;
       setDicePos(dx,dy);
       contactShadow.style.opacity = Math.max(0.15, 1 - Math.abs(dy-restY)/(camWrap.clientHeight*0.5));
+
+      // girar o dado conforme a mão se move ao redor dele — sensação de segurar um objeto real
+      cubeRotY += dxDelta*0.35;
+      cubeRotX = Math.max(-70, Math.min(20, cubeRotX - dyDelta*0.25));
+      cube.style.transform = `rotateX(${cubeRotX}deg) rotateY(${cubeRotY}deg)`;
 
       // gatilho independente de força: basta o braço ter subido o suficiente, não importa a velocidade
       const heldLongEnough = heldSince && (now - heldSince) > MIN_HOLD_MS;
@@ -505,6 +517,8 @@
       if(farFromDice && !liftedEnough){
         mode = 'idle';
         heldSince = null;
+        cube.style.animation = 'idleBob 2.8s ease-in-out infinite';
+        cube.style.transform = '';
         statusEl.textContent = 'Pega o dado com as duas mãos e levanta o braço';
         animateDrop();
       }
@@ -538,8 +552,11 @@
     const result = 1+Math.floor(Math.random()*6);
     const r = ROT[result];
     const spins = 9 + Math.floor(Math.random()*3); // mais voltas pra preencher os 3~4s de giro
-    const rx = r.x + spins*360*(Math.random()>0.5?1:-1);
-    const ry = r.y + spins*360*(Math.random()>0.5?1:-1);
+    // continua a partir da rotação em que o jogador deixou o dado (evita salto visual)
+    const diffX = ((r.x - cubeRotX) % 360 + 360) % 360;
+    const diffY = ((r.y - cubeRotY) % 360 + 360) % 360;
+    const rx = cubeRotX + diffX + spins*360*(Math.random()>0.5?1:-1);
+    const ry = cubeRotY + diffY + spins*360*(Math.random()>0.5?1:-1);
     const dur = 3.2 + Math.random()*0.8; // 3.2 a 4.0s
     const jumpH = camWrap.clientHeight*0.42*power;
     const sideDrift = Math.max(-80, Math.min(80, vxAtRelease*0.15));
@@ -552,7 +569,7 @@
 
     requestAnimationFrame(()=>{
       setDicePos(startX+sideDrift, Math.max(camWrap.clientHeight*0.18, startY-jumpH));
-      cube.style.transform = `rotateX(${rx*0.5}deg) rotateY(${ry*0.5}deg)`;
+      cube.style.transform = `rotateX(${cubeRotX+(rx-cubeRotX)*0.5}deg) rotateY(${cubeRotY+(ry-cubeRotY)*0.5}deg)`;
     });
 
     setTimeout(()=>{
@@ -592,6 +609,9 @@
 
     setTimeout(()=>{
       mode = 'idle';
+      cubeRotX = -15; cubeRotY = 20;
+      cube.style.transition = '';
+      cube.style.transform = '';
       cube.style.animation = 'idleBob 2.8s ease-in-out infinite';
       prizeBanner.classList.remove('show');
       stopCoinRain();
